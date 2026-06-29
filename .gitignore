@@ -1,0 +1,13 @@
+# Local database (Your actual restaurant data shouldn't go to Git!)
+*.sqlite3
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# Virtual environment files
+venv/
+.env
+
+# OS files
+.DS_Store
