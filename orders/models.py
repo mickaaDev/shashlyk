@@ -48,6 +48,7 @@ class OrderItem(models.Model):
     PRINT_STATUS_CHOICES = (
         ('pending', _('Ждет отправки')),   # Waiter is still adding items on the screen
         ('sent', _('Отправлен на печать')), # Ticket was sent to Bar/Kitchen/Grill
+        ('ready', _('Готово')),
     )
 
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items', verbose_name=_("Заказ"))
@@ -55,9 +56,8 @@ class OrderItem(models.Model):
     quantity = models.PositiveIntegerField(default=1, verbose_name=_("Кол-во"))
     price_at_order = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Цена при заказе"))
 
-    print_status = models.CharField(max_length=15, choices=PRINT_STATUS_CHOICES, default='pending', verbose_name=_("Статус печати"))
+    status = models.CharField(max_length=15, choices=PRINT_STATUS_CHOICES, default='pending', verbose_name=_("Статус печати"))
     comment = models.CharField(max_length=150, blank=True, null=True, verbose_name=_("Комментарий к блюду (напр. без лука)"))
-
     def get_total_price(self):
         return self.quantity * self.price_at_order
 
