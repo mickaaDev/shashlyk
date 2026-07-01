@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Чек №{{ order.id }}</title>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace; /* Моноширинный шрифт как на реальном чеке */
+            font-size: 14px;
+            line-height: 1.3;
+            width: 300px; /* Идеальная ширина под чековую ленту */
+            margin: 0 auto;
+            padding: 10px;
+            color: #000;
+        }
+        .text-center { text-align: center; }
+        .text-end { text-align: right; }
+        .bold { font-weight: bold; }
+        .divider {
+            border-top: 1px dashed #000;
+            margin: 10px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 5px 0;
+        }
+        td { padding: 3px 0; vertical-align: top; }
+        .w-50 { width: 50%; }
+        
+        /* Стили для того, чтобы при печати на принтере не лезло ничего лишнего */
+        @media print {
+            body { width: 100%; padding: 0; margin: 0; }
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="no-print" style="margin-bottom: 20px; text-align: center;">
+        <button onclick="window.print();" style="padding: 10px 20px; font-weight: bold; background: #28a745; color: #fff; border: none; border-radius: 4px; cursor: pointer;">
+            🖨️ Распечатать чек
+        </button>
+        <a href="{% url 'waiter_dashboard' %}" style="display: inline-block; margin-left: 10px; padding: 10px 15px; background: #6c757d; color: #fff; text-decoration: none; border-radius: 4px;">
+            Назад
+        </a>
+    </div>
+
+    <div class="text-center">
+        <h2 style="margin: 0 0 5px 0; text-transform: uppercase;">🔥 SHASHLYK POS</h2>
+        <p style="margin: 0; font-size: 12px;">Добро пожаловать в нашу шашлычную!</p>
+    </div>
+
+    <div class="divider"></div>
+
+    <table>
+        <tr>
+            <td><strong>Счет №:</strong> #{{ order.id }}</td>
+            <td class="text-end"><strong>Стол:</strong> №{{ order.table.number }}</td>
+        </tr>
+        <tr>
+            <td><strong>Официант:</strong> {{ order.waiter.username }}</td>
+            <td class="text-end"><strong>Время:</strong> {{ order.created_at|date:"H:i" }}</td>
+        </tr>
+        <tr>
+            <td colspan="2"><strong>Дата:</strong> {{ order.created_at|date:"d.m.Y" }}</td>
+        </tr>
+    </table>
+
+    <div class="divider"></div>
+
+    <table style="font-size: 13px;">
+        <thead>
+            <tr style="border-bottom: 1px dashed #000;">
+                <th style="text-align: left; padding-bottom: 5px;">Наименование</th>
+                <th style="text-align: center; padding-bottom: 5px;">Кол-во</th>
+                <th style="text-align: right; padding-bottom: 5px;">Итого</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in order.items.all %}
+                <tr>
+                    <td>{{ item.product.name }}</td>
+                    <td class="text-center">{{ item.quantity }}</td>
+                    <td class="text-end">{{ item.get_total_price }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="divider"></div>
+
+    <table style="font-size: 16px;" class="bold">
+        <tr>
+            <td>ИТОГО К ОПЛАТЕ:</td>
+            <td class="text-end">{{ order.total_amount }} сом</td>
+        </tr>
+    </table>
+
+    <div class="divider" style="border-top: 1px double #000;"></div>
+
+    <div class="text-center" style="font-size: 12px; margin-top: 15px;">
+        <p style="margin: 0;">Спасибо за визит!</p>
+        <p style="margin: 5px 0 0 0; font-style: italic;">Приятного аппетита!</p>
+    </div>
+
+    <script>
+        window.onload = function() {
+            // Раскомментируйте строчку ниже, если хотите, чтобы окно печати вылетало САМО при открытии страницы
+            // window.print();
+        }
+    </script>
+</body>
+</html>

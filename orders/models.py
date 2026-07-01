@@ -37,11 +37,11 @@ class Order(models.Model):
     def __str__(self):
         # Safely fall back if the table was removed or set to NULL
         table_num = self.table.number if self.table else _("Удален/Нет")
-        return f"Заказ №{self.id} (Стол {table_num})"
+        return f"Счет №{self.id} ({table_num})"
 
     class Meta:
-        verbose_name = _('Заказ')
-        verbose_name_plural = _('Заказы')
+        verbose_name = _('Счет')
+        verbose_name_plural = _('Счета (Чеки)')
 
 
 class OrderItem(models.Model):
@@ -60,7 +60,8 @@ class OrderItem(models.Model):
     comment = models.CharField(max_length=150, blank=True, null=True, verbose_name=_("Комментарий к блюду (напр. без лука)"))
     def get_total_price(self):
         return self.quantity * self.price_at_order
-
+    def __str__(self):
+        return f"{self.product.name} (x{self.quantity})"
     def save(self, *args, **kwargs):
         if not self.pk and not self.price_at_order:
             self.price_at_order = self.product.price

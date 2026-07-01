@@ -80,11 +80,24 @@
                     <h4 class="mb-0 text-muted">Итого:</h4>
                     <h3 class="mb-0 fw-bold text-success">{{ order.total_amount }} сом</h3>
                 </div>
-                <form action="{% url 'send_order_to_kitchen' order.id %}" method="POST">
+                
+                <!-- Action Row 1: Send to Kitchen Stations -->
+                <form action="{% url 'send_order_to_kitchen' order.id %}" method="POST" class="mb-2">
                     {% csrf_token %}
                     <div class="d-grid gap-2">
                         <button type="submit" class="btn btn-danger font-weight-bold p-2 fw-bold fs-5 shadow-sm">
                             🧾 Отправить встречку (В Печать)
+                        </button>
+                    </div>
+                </form>
+
+                <!-- Action Row 2: Unified Close Table Button -->
+                <form action="{% url 'close_order' order.id %}" method="POST">
+                    {% csrf_token %}
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-success font-weight-bold p-2 fw-bold text-uppercase shadow-sm fs-5" 
+                                onclick="return confirm('Вы уверены, что хотите рассчитать гостей и закрыть этот стол?')">
+                            💰 Закрыть Стол (Расчет)
                         </button>
                     </div>
                 </form>

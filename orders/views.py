@@ -6,7 +6,9 @@ from .models import Table, Order, OrderItem
 from menu.models import Category, Product
 from core.models import Shift
 from django.shortcuts import redirect
-from django.db.models import Prefetch  # 🌟 ADD THIS LINE
+from django.db.models import Prefetch  
+from django.urls import NoReverseMatch
+from .utils import send_to_bar_printer, send_to_grill_printer, send_to_kitchen_printer
 
 
 
@@ -15,7 +17,14 @@ def waiter_dashboard(request):
     active_shift = Shift.objects.filter(is_active=True).first()
 
     if not active_shift:
-        messages.error(request, "Внимание: Рабочая смена не открыта! Обратитесь к менеджеру.")
+        try:
+            return redirect('core:shift_management')
+        except NoReverseMatch:
+            try:
+                return redirect('shift_management')
+            except NoReverseMatch:
+                # Жесткий запасной вариант, если имена маршрутов вообще не резолвятся
+                return redirect('/management/shift/')
     tables = Table.objects.filter(is_active=True).order_by('number')
 
     active_orders = Order.objects.filter(status='active').select_related('table', 'waiter')
@@ -119,26 +128,38 @@ def send_order_to_kitchen(request, order_id):
         if not pending_items.exists():
             messages.warning(request, "Нет новых блюд для отправки!")
             return redirect('order_detail', table_id=order.table.id)
-            
-        # 1. Flip the new additions to sent status
+        
+        grill_items = pending_items.filter(product__department='grill')
+        bar_items = pending_items.filter(product__department='bar')
+        kitchen_items = pending_items.filter(product__department='kitchen')
+        
+        # --- МЕСТО ДЛЯ ПЕЧАТИ ВСТРЕЧЕК ---
+        # Здесь вы сможете вызвать функции печати для каждого цеха отдельно, например:
+        if grill_items.exists(): send_to_grill_printer(order, grill_items) 
+        if bar_items.exists(): send_to_bar_printer(order, bar_items)
+        if kitchen_items.exists(): send_to_kitchen_printer(order, kitchen_items)
         pending_items.update(status='sent')
         
-        # 2. 🌟 MERGE DUPLICATES: Combine rows of the same product that are now both 'sent'
+        # 2. MERGE DUPLICATES: Объединяем одинаковые блюда, чтобы не плодить строки в чеке
         products_in_order = order.items.values_list('product_id', flat=True).distinct()
+        
         for prod_id in products_in_order:
             sent_items = order.items.filter(product_id=prod_id, status='sent')
             if sent_items.count() > 1:
-                # Keep the first row, aggregate the quantities of the rest
                 primary_item = sent_items.first()
                 total_qty = sum(item.quantity for item in sent_items)
                 
                 primary_item.quantity = total_qty
                 primary_item.save()
                 
-                # Delete the redundant duplicate rows
+                # Удаляем дубликаты строк
                 sent_items.exclude(id=primary_item.id).delete()
 
-        messages.success(request, f"Новые дозаказы отправлены на печать!")
+        messages.success(request, "Новые дозаказы отправлены по цехам!")
+        return redirect('order_detail', table_id=order.table.id)
+        
+    # На случай, если кто-то постучится GET запросом
+    order = get_object_or_404(Order, id=order_id)
     return redirect('order_detail', table_id=order.table.id)
 
 @login_required
@@ -171,3 +192,46 @@ def add_item_to_order(request, order_id, product_id):
     item.save()
     order.update_total()
     return redirect('order_detail', table_id=order.table.id)
+
+
+
+# @login_required
+def close_order(request, order_id):
+    """Closes out the order check and releases the billiard table."""
+    if request.method == "POST":
+        order = get_object_or_404(Order, id=order_id, status='active')
+        
+        # Guard rail: Block closure if unprinted drafts exist
+        if order.items.filter(status='pending').exists():
+            messages.error(request, "Нельзя закрыть счет! Сначала отправьте или удалите черновики.")
+            return redirect('order_detail', table_id=order.table.id)
+            
+        # 1. Finalize and lock the bill details based on your model schema
+        order.status = 'closed'
+        order.closed_at = timezone.now()
+        order.save()
+        
+        # 2. Release table ownership state back to green/available
+        if order.table:
+            table = order.table
+            table.is_available = True
+            table.save()
+            messages.success(request, f"Стол №{table.number} успешно закрыт и рассчитан!")
+        else:
+            messages.success(request, f"Заказ №{order.id} успешно закрыт!")
+            
+        return redirect('waiter_dashboard')
+        
+    return redirect('waiter_dashboard')
+
+@login_required
+def view_bill(request, order_id):
+    """Генерирует чистый гостевой чек для предпросмотра или печати."""
+    order = get_object_or_404(Order, id=order_id)
+    # Загружаем все позиции этого чека (и отправленные, и черновики)
+    order_items = order.items.all()
+    
+    return render(request, 'orders/bill_detail.html', {
+        'order': order,
+        'order_items': order_items
+    })

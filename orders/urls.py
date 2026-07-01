@@ -10,4 +10,6 @@ urlpatterns = [
     path('item/<int:item_id>/decrease/', views.decrease_item, name='decrease_item'),
     path('order/<int:order_id>/send/', views.send_order_to_kitchen, name='send_order_to_kitchen'),
     path('item/<int:item_id>/resend/', views.resend_item_to_kitchen, name='resend_item_to_kitchen'),
+    path('order/<int:order_id>/close/', views.close_order, name='close_order'),
+    path('order/<int:order_id>/bill/', views.view_bill, name='view_bill'),
 ]

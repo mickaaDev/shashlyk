@@ -34,6 +34,17 @@ class Category(models.Model):
 
 
 class Product(models.Model):
+    DEPARTMENT_CHOICES = [
+        ('grill', '🔥 Мангал / Гриль'),
+        ('bar', '🍹 Бар / Напитки'),
+        ('kitchen', '🍳 Горячий/Холодный цех'),
+    ]
+    department = models.CharField(
+        max_length=20, 
+        choices=DEPARTMENT_CHOICES, 
+        default='kitchen', 
+        verbose_name="Цех приготовления"
+    )
     category = models.ForeignKey(
         Category, 
         on_delete=models.PROTECT, 
