@@ -12,4 +12,5 @@ urlpatterns = [
     path('item/<int:item_id>/resend/', views.resend_item_to_kitchen, name='resend_item_to_kitchen'),
     path('order/<int:order_id>/close/', views.close_order, name='close_order'),
     path('order/<int:order_id>/bill/', views.view_bill, name='view_bill'),
+    path('order/<int:order_id>/print-prebill/', views.print_prebill, name='print_prebill'),
 ]

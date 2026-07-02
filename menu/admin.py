@@ -4,11 +4,18 @@ from .models import Category, Product
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
-    # 🌟 Fixed: Changed from 'get_type_display' to 'get_station_display'
-    list_display = ('name', 'get_station_display')
-    # 🌟 Fixed: Changed from 'type' to 'station'
+    # 🌟 Изменили 'get_station_display' на наш собственный метод 'display_station'
+    list_display = ('name', 'display_station')
     list_filter = ('station',)
     search_fields = ('name',)
+
+    # 🌟 Явно прописываем метод получения красивого имени цеха
+    def display_station(self, obj):
+        return obj.get_station_display()
+    
+    # Задаем красивое имя для шапки таблицы вместо "method" или "get_station_display"
+    display_station.short_description = _("Куда отправлять чек (Цех)")
+    display_station.admin_order_field = 'station'
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):

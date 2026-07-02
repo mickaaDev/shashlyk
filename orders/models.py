@@ -9,6 +9,11 @@ class Table(models.Model):
     is_active = models.BooleanField(default=True, verbose_name=_("Активен (Существует в зале)"))
     def __str__(self):
         return f"Стол №{self.number}"
+    
+    @property
+    def current_active_order(self):
+        """Возвращает заказ, который уже ушел в печать на кухню."""
+        return self.orders.filter(status='active').first()
 
     class Meta:
         verbose_name = _('Стол')
@@ -21,6 +26,18 @@ class Order(models.Model):
         ('active', _('Открыт (Обслуживание)')),
         ('closed', _('Оплачен (Закрыт)')),
         ('cancelled', _('Отменен')),
+    )
+    PAYMENT_METHODS = [
+        ('cash', 'Наличные 💵'),
+        ('card', 'Карта 💳'),
+        ('qr', 'QR-платеж 📱'),
+    ]
+    payment_method = models.CharField(
+        max_length=10,
+        choices=PAYMENT_METHODS,
+        blank=True,
+        null=True,
+        verbose_name="Способ оплаты"
     )
     
     table = models.ForeignKey(Table, on_delete=models.SET_NULL, null=True, blank=True, related_name='orders', verbose_name=_("Стол"))

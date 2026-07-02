@@ -40,7 +40,7 @@ class OrderItemInline(admin.TabularInline):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ('id', 'table', 'waiter', 'status', 'created_at', 'closed_at', 'formatted_total_amount', 'view_bill_button')
+    list_display = ('id', 'table', 'waiter', 'status','created_at', 'closed_at', 'formatted_total_amount', 'view_bill_button')
     list_filter = ('status', 'created_at', 'waiter', 'table')
     search_fields = ('id', 'waiter__username', 'table__number')
     
@@ -52,12 +52,12 @@ class OrderAdmin(admin.ModelAdmin):
     def get_readonly_fields(self, request, obj=None):
         # Always lock core financials, if closed, drop absolute flat-text lock across the header
         if obj and obj.status == 'closed':
-            return self.base_readonly + ['table', 'waiter', 'status']
-        return self.base_readonly + ['table', 'waiter', 'status']
+            return self.base_readonly + ['table', 'waiter', 'status','payment_method']
+        return self.base_readonly + ['table', 'waiter', 'status','payment_method']
 
     fieldsets = (
         (_('Основная информация'), {
-            'fields': ('table', 'waiter', 'status')
+            'fields': ('table', 'waiter', 'status','payment_method')
         }),
         (_('Временные метки и Финансы'), {
             'fields': ('total_amount', 'created_at', 'closed_at'),

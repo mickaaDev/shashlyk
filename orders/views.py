@@ -1,14 +1,14 @@
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
+from django.http import JsonResponse, HttpResponse, Http404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.utils import timezone
 from .models import Table, Order, OrderItem
 from menu.models import Category, Product
 from core.models import Shift
-from django.shortcuts import redirect
 from django.db.models import Prefetch  
 from django.urls import NoReverseMatch
-from .utils import send_to_bar_printer, send_to_grill_printer, send_to_kitchen_printer
+from .utils import send_to_bar_printer, send_to_grill_printer, send_to_kitchen_printer, send_to_bill_printer
 
 
 
@@ -38,91 +38,123 @@ def waiter_dashboard(request):
     return render(request, 'orders/dashboard.html', context)
 
 
-# @login_required
+@login_required
+def print_prebill(request, order_id):
+    """Печатает предчек (текущее состояние заказа) без закрытия стола."""
+    if request.method == "POST":
+        order = get_object_or_404(Order, id=order_id, status='active')
+        
+        # Вызываем функцию печати из utils.py
+        # Передаем флаг is_final=False, чтобы на чеке было написано "ПРЕДЧЕК"
+        send_to_bill_printer(order, is_final=False)
+        
+        messages.success(request, f"Предчек для стола №{order.table.number} отправлен на печать!")
+    return redirect('order_detail', table_id=order.table.id)
+
+
+@login_required
 def order_detail(request, table_id):
-    """Displays items inside an active order and shows the menu grid to add more items."""
-    table = get_object_or_404(Table, id=table_id, is_active=True)
+    table = get_object_or_404(Table, id=table_id)
     
-    # Find or automatically create an active order for this table
-    order, created = Order.objects.get_or_create(
-        table=table,
-        status='active',
-        defaults={'waiter': request.user}
-    )
+    # 1. Проверяем, есть ли уже у стола открытый заказ (активный или пока еще черновик)
+    order = Order.objects.filter(
+        table=table, 
+        status__in=['draft', 'active']
+    ).first()
     
-    # If the table was free, mark it as occupied
-    if created and table.is_available:
-        table.is_available = False
-        table.save()
-
-    # Optimization: Prefetch categories and their active products for the sidebar/grid
-    menu_categories = Category.objects.prefetch_related(
-        Prefetch('products', queryset=Product.objects.filter(is_active=True))
-    )
-
-    context = {
-        'table': table,
+    # 2. Если заказа вообще нет (стол абсолютно чистый), создаем его как DRAFT
+    if not order:
+        order = Order.objects.create(
+            table=table,
+            waiter=request.user,
+            status='draft'  # 🌟 ВАЖНО: создаем как черновик, чтобы зал оставался зеленым!
+        )
+    
+    # Дальше идет ваш привычный код рендеринга...
+    order_items = order.items.all()
+    menu_categories = Category.objects.all() # или ваша логика категорий
+    
+    return render(request, 'orders/order_detail.html', {
         'order': order,
-        'order_items': order.items.all().select_related('product'),
+        'table': table,
+        'order_items': order_items,
         'menu_categories': menu_categories,
-    }
-    return render(request, 'orders/order_detail.html', context)
+    })
 
 @login_required
 def add_item_to_order(request, order_id, product_id):
-    """Increments or adds a product to an ongoing table check."""
-    if request.method == "POST":
-        order = get_object_or_404(Order, id=order_id, status='active')
-        product = get_object_or_404(Product, id=product_id, is_active=True)
+    if request.method == 'POST':
+        # Ищем заказ в статусе draft или active (чтобы пускало новые столы)
+        order = get_object_or_404(Order, id=order_id, status__in=['draft', 'active'])
+        product = get_object_or_404(Product, id=product_id)
         
-        # Check if item is already on the check
-        order_item, item_created = OrderItem.objects.get_or_create(
+        # Ищем именно черновик блюда (со статусом pending)
+        item, created = OrderItem.objects.get_or_create(
             order=order,
             product=product,
-            defaults={'price_at_order': product.price, 'quantity': 1}
+            status='pending',
+            defaults={'price_at_order': product.price, 'quantity': 0}
         )
         
-        if not item_created:
-            order_item.quantity += 1
-            order_item.save()
-            
-        # Re-trigger total computation hook inside the model
-        order.update_total()
+        item.quantity += 1
+        item.save()
         
-    return redirect('order_detail', table_id=order.table.id)
+        # Пересчитываем сумму
+        order.update_total()  # Используем .update_total(), так как он у вас в остальных методах
+        
+        # Если это асинхронный запрос от нашего JS
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            return HttpResponse("OK", status=200)
+            
+        # На случай обычного перехода по ссылке/форме
+        return redirect('order_detail', table_id=order.table.id)
+        
+    raise Http404("Метод не поддерживается")
 
 
 # @login_required
 def increase_item(request, item_id):
-    """Increments item quantity from the bill sidebar."""
+    """Увеличивает количество позиции в чеке (работает и для черновиков, и для активных)."""
     if request.method == "POST":
-        item = get_object_or_404(OrderItem, id=item_id, order__status='active')
+        # 🌟 Меняем order__status='active' на order__status__in=['draft', 'active']
+        item = get_object_or_404(OrderItem, id=item_id, order__status__in=['draft', 'active'])
         item.quantity += 1
         item.save()
-        item.order.update_total()
+        
+        # Используем метод, который есть у вашей модели (в коде выше были оба варианта, выберите рабочий)
+        if hasattr(item.order, 'update_total'):
+            item.order.update_total()
+        else:
+            item.order.update_total_amount()
+            
     return redirect('order_detail', table_id=item.order.table.id)
 
 # @login_required
 def decrease_item(request, item_id):
-    """Decrements item quantity or deletes it if quantity drops to 0."""
+    """Уменьшает количество или удаляет позицию (работает и для черновиков, и для active)."""
     if request.method == "POST":
-        item = get_object_or_404(OrderItem, id=item_id, order__status='active')
+        # 🌟 Меняем order__status='active' на order__status__in=['draft', 'active']
+        item = get_object_or_404(OrderItem, id=item_id, order__status__in=['draft', 'active'])
         order = item.order
         
         if item.quantity > 1:
             item.quantity -= 1
             item.save()
         else:
-            item.delete()  # Remove completely if dropping below 1
+            item.delete()  # Удаляем совсем, если количество стало 0
             
-        order.update_total()
+        if hasattr(order, 'update_total'):
+            order.update_total()
+        else:
+            order.update_total_amount()
+            
     return redirect('order_detail', table_id=order.table.id)
-
 
 @login_required
 def send_order_to_kitchen(request, order_id):
     if request.method == "POST":
-        order = get_object_or_404(Order, id=order_id, status='active')
+        # 🌟 Ищем заказ в статусе 'draft' (или 'active', если это ДОзаказ в уже работающий стол)
+        order = get_object_or_404(Order, id=order_id, status__in=['draft', 'active'])
         pending_items = order.items.filter(status='pending')
         
         if not pending_items.exists():
@@ -134,13 +166,19 @@ def send_order_to_kitchen(request, order_id):
         kitchen_items = pending_items.filter(product__department='kitchen')
         
         # --- МЕСТО ДЛЯ ПЕЧАТИ ВСТРЕЧЕК ---
-        # Здесь вы сможете вызвать функции печати для каждого цеха отдельно, например:
         if grill_items.exists(): send_to_grill_printer(order, grill_items) 
         if bar_items.exists(): send_to_bar_printer(order, bar_items)
         if kitchen_items.exists(): send_to_kitchen_printer(order, kitchen_items)
+        
         pending_items.update(status='sent')
         
-        # 2. MERGE DUPLICATES: Объединяем одинаковые блюда, чтобы не плодить строки в чеке
+        # 🌟 КЛЮЧЕВОЙ МОМЕНТ: Если это был первый запуск (черновик), делаем заказ активным.
+        # Теперь на карте зала этот стол официально загорится красным ("В работе")
+        if order.status == 'draft':
+            order.status = 'active'
+            order.save()
+        
+        # 2. MERGE DUPLICATES: Объединяем одинаковые блюда
         products_in_order = order.items.values_list('product_id', flat=True).distinct()
         
         for prod_id in products_in_order:
@@ -152,15 +190,14 @@ def send_order_to_kitchen(request, order_id):
                 primary_item.quantity = total_qty
                 primary_item.save()
                 
-                # Удаляем дубликаты строк
                 sent_items.exclude(id=primary_item.id).delete()
 
         messages.success(request, "Новые дозаказы отправлены по цехам!")
         return redirect('order_detail', table_id=order.table.id)
         
-    # На случай, если кто-то постучится GET запросом
     order = get_object_or_404(Order, id=order_id)
     return redirect('order_detail', table_id=order.table.id)
+
 
 @login_required
 def resend_item_to_kitchen(request, item_id):
@@ -175,54 +212,54 @@ def resend_item_to_kitchen(request, item_id):
     return redirect('order_detail', table_id=item.order.table.id)
 
 
-@login_required
-def add_item_to_order(request, order_id, product_id):
-    order = get_object_or_404(Order, id=order_id, status='active')
-    product = get_object_or_404(Product, id=product_id)
-    
-    # 🌟 LOOK ONLY FOR AN UNSENT (PENDING) DRAFT OF THIS PRODUCT
-    item, created = OrderItem.objects.get_or_create(
-        order=order,
-        product=product,
-        status='pending',
-        defaults={'price_at_order': product.price, 'quantity': 0}
-    )
-    
-    item.quantity += 1
-    item.save()
-    order.update_total()
-    return redirect('order_detail', table_id=order.table.id)
+
 
 
 
 # @login_required
 def close_order(request, order_id):
-    """Closes out the order check and releases the billiard table."""
+    """Closes out the order check, prints the final bill, and releases the table."""
     if request.method == "POST":
         order = get_object_or_404(Order, id=order_id, status='active')
         
-        # Guard rail: Block closure if unprinted drafts exist
+        # Защитный барьер: проверяем черновики
         if order.items.filter(status='pending').exists():
             messages.error(request, "Нельзя закрыть счет! Сначала отправьте или удалите черновики.")
             return redirect('order_detail', table_id=order.table.id)
             
-        # 1. Finalize and lock the bill details based on your model schema
+        # 🌟 ПЕРЕХВАТЫВАЕМ ТИП ОПЛАТЫ ИЗ ФОРМЫ
+        payment_method = request.POST.get('payment_method')
+        if payment_method not in dict(Order.PAYMENT_METHODS):
+            messages.error(request, "Пожалуйста, выберите корректный способ оплаты!")
+            return redirect('order_detail', table_id=order.table.id)
+            
+        # Сохраняем тип оплаты в базу данных
+        order.payment_method = payment_method
+        
+        # --- АВТОМАТИЧЕСКАЯ ПЕЧАТЬ ФИНАЛЬНОГО ЧЕКА НА БЭКЕНДЕ ---
+        try:
+            # Передаем is_final=True — теперь функция внутри utils сама заглянет 
+            # в order.payment_method и красиво напечатает его в чеке
+            send_to_bill_printer(order, is_final=True)
+        except Exception as e:
+            messages.warning(request, f"Заказ закрыт, но возникла ошибка печати: {e}")
+
+        # Фиксируем закрытие
         order.status = 'closed'
         order.closed_at = timezone.now()
         order.save()
         
-        # 2. Release table ownership state back to green/available
+        # Освобождаем стол
         if order.table:
             table = order.table
             table.is_available = True
             table.save()
-            messages.success(request, f"Стол №{table.number} успешно закрыт и рассчитан!")
-        else:
-            messages.success(request, f"Заказ №{order.id} успешно закрыт!")
+            messages.success(request, f"Стол №{table.number} успешно рассчитан ({order.get_payment_method_display()})!")
             
         return redirect('waiter_dashboard')
         
     return redirect('waiter_dashboard')
+
 
 @login_required
 def view_bill(request, order_id):
