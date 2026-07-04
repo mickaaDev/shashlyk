@@ -44,8 +44,6 @@
         }
         .text-logo-accent {
             color: #1c200f !important; /* Теплый, сочный янтарно-оранжевый цвет */
-            /* Если хотите благородный золотисто-горчичный, используйте: #d4a373 */
-            /* Если хотите стильный темно-графитовый: #2c3e50 */
         }
         /* Кастомизация всплывающих уведомлений Django */
         .alert-custom {
@@ -70,22 +68,40 @@
 </head>
 <body>
 
-    <!-- Навигационная панель (убрали mb-4) -->
+    <!-- Навигационная панель -->
     <nav class="navbar navbar-expand navbar-light py-2">
-    <div class="container-fluid px-3">
-        <!-- Поменяли text-danger на text-logo-accent -->
-        <a class="navbar-brand fw-bold text-logo-accent d-flex align-items-center" href="{% url 'waiter_dashboard' %}">
-            <span class="me-2"></span> SHASHLYK POS
-        </a>
-        <div class="ms-auto">
-            <span class="navbar-text text-secondary small">
-                Пользователь: <strong class="text-dark fw-semibold">{{ user.username }}</strong>
-            </span>
+        <div class="container-fluid px-3">
+            <a class="navbar-brand fw-bold text-logo-accent d-flex align-items-center" href="{% url 'waiter_dashboard' %}">
+                <span class="me-2">🎱</span> SHASHLYK POS
+            </a>
+            
+            <div class="ms-auto">
+                {% if user.is_authenticated %}
+                    <div class="d-flex align-items-center gap-3">
+                        <!-- Имя текущего официанта -->
+                        <span class="navbar-text text-secondary small">
+                            Пользователь: <strong class="text-dark fw-semibold">{{ user.username }}</strong>
+                        </span>
+                        
+                        <!-- Безопасная кнопка выхода (POST-запрос) -->
+                        <form action="{% url 'logout' %}" method="post" class="m-0 p-0">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-outline-danger py-1 px-2 rounded-2 fw-medium" style="font-size: 0.8rem;">
+                                Выйти
+                            </button>
+                        </form>
+                    </div>
+                {% else %}
+                    <!-- Состояние, когда пользователь не авторизован -->
+                    <span class="navbar-text text-muted small fw-medium">
+                        Требуется авторизация
+                    </span>
+                {% endif %}
+            </div>
         </div>
-    </div>
-</nav>
+    </nav>
 
-    <!-- Изменили класс на кастомный wrapper -->
+    <!-- Главный контент-wrapper -->
     <div class="main-content-wrapper">
         {% if messages %}
             {% for message in messages %}

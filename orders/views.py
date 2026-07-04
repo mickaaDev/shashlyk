@@ -12,7 +12,7 @@ from .utils import send_to_bar_printer, send_to_grill_printer, send_to_kitchen_p
 
 
 
-# @login_required
+@login_required
 def waiter_dashboard(request):
     active_shift = Shift.objects.filter(is_active=True).first()
 
@@ -112,7 +112,7 @@ def add_item_to_order(request, order_id, product_id):
     raise Http404("Метод не поддерживается")
 
 
-# @login_required
+@login_required
 def increase_item(request, item_id):
     """Увеличивает количество позиции в чеке (работает и для черновиков, и для активных)."""
     if request.method == "POST":
@@ -129,7 +129,7 @@ def increase_item(request, item_id):
             
     return redirect('order_detail', table_id=item.order.table.id)
 
-# @login_required
+@login_required
 def decrease_item(request, item_id):
     """Уменьшает количество или удаляет позицию (работает и для черновиков, и для active)."""
     if request.method == "POST":
@@ -216,7 +216,7 @@ def resend_item_to_kitchen(request, item_id):
 
 
 
-# @login_required
+@login_required
 def close_order(request, order_id):
     """Closes out the order check, prints the final bill, and releases the table."""
     if request.method == "POST":
