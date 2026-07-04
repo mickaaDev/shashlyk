@@ -11,3 +11,37 @@ venv/
 
 # OS files
 .DS_Store
+
+# --- База данных (Локальные данные ресторана никогда не идут в Git) ---
+*.sqlite3
+
+# --- Python и Кэш (Главная причина конфликтов при переносе) ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# --- Конфиденциальные данные ---
+.env
+
+# --- Специфичные файлы операционных систем ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# --- Настройки сред разработки (IDE) ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
