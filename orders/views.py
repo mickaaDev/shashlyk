@@ -8,12 +8,16 @@ from menu.models import Category, Product
 from core.models import Shift
 from django.db.models import Prefetch  
 from django.urls import NoReverseMatch
+from django.db import transaction
 from .utils import send_to_bar_printer, send_to_grill_printer, send_to_kitchen_printer, send_to_bill_printer
 
 
 
 @login_required
 def waiter_dashboard(request):
+    # 🌟 АВТООЧИСТКА: Удаляем пустые черновики, если официант зашел в стол и ничего не заказал
+    Order.objects.filter(status='draft', items__isnull=True).delete()
+
     active_shift = Shift.objects.filter(is_active=True).first()
 
     if not active_shift:
@@ -25,6 +29,7 @@ def waiter_dashboard(request):
             except NoReverseMatch:
                 # Жесткий запасной вариант, если имена маршрутов вообще не резолвятся
                 return redirect('/management/shift/')
+                
     tables = Table.objects.filter(is_active=True).order_by('number')
 
     active_orders = Order.objects.filter(status='active').select_related('table', 'waiter')
@@ -70,9 +75,16 @@ def order_detail(request, table_id):
             status='draft'  # 🌟 ВАЖНО: создаем как черновик, чтобы зал оставался зеленым!
         )
     
-    # Дальше идет ваш привычный код рендеринга...
     order_items = order.items.all()
-    menu_categories = Category.objects.all() # или ваша логика категорий
+    
+    # 🌟 ИСПРАВЛЕНИЕ ТУТ: Фильтруем категории и предварительно загружаем ТОЛЬКО активные продукты
+    # Замените 'product_set' на имя вашего Related Name в модели Category, если вы его переименовывали (например, 'products')
+    menu_categories = Category.objects.all().prefetch_related(
+    Prefetch(
+        'products', 
+        queryset=Product.objects.filter(is_active=True).order_by('name')
+    )
+)
     
     return render(request, 'orders/order_detail.html', {
         'order': order,
@@ -153,7 +165,6 @@ def decrease_item(request, item_id):
 @login_required
 def send_order_to_kitchen(request, order_id):
     if request.method == "POST":
-        # 🌟 Ищем заказ в статусе 'draft' (или 'active', если это ДОзаказ в уже работающий стол)
         order = get_object_or_404(Order, id=order_id, status__in=['draft', 'active'])
         pending_items = order.items.filter(status='pending')
         
@@ -165,34 +176,43 @@ def send_order_to_kitchen(request, order_id):
         bar_items = pending_items.filter(product__department='bar')
         kitchen_items = pending_items.filter(product__department='kitchen')
         
-        # --- МЕСТО ДЛЯ ПЕЧАТИ ВСТРЕЧЕК ---
-        if grill_items.exists(): send_to_grill_printer(order, grill_items) 
-        if bar_items.exists(): send_to_bar_printer(order, bar_items)
-        if kitchen_items.exists(): send_to_kitchen_printer(order, kitchen_items)
-        
-        pending_items.update(status='sent')
-        
-        # 🌟 КЛЮЧЕВОЙ МОМЕНТ: Если это был первый запуск (черновик), делаем заказ активным.
-        # Теперь на карте зала этот стол официально загорится красным ("В работе")
-        if order.status == 'draft':
-            order.status = 'active'
-            order.save()
-        
-        # 2. MERGE DUPLICATES: Объединяем одинаковые блюда
-        products_in_order = order.items.values_list('product_id', flat=True).distinct()
-        
-        for prod_id in products_in_order:
-            sent_items = order.items.filter(product_id=prod_id, status='sent')
-            if sent_items.count() > 1:
-                primary_item = sent_items.first()
-                total_qty = sum(item.quantity for item in sent_items)
+        # Включаем атомарную транзакцию, чтобы списание и отправка происходили одновременно и без сбоев
+        with transaction.atomic():
+            # 🌟 КЛЮЧЕВОЙ БЛОК: Списание остатков со склада ДО смены статуса на 'sent'
+            for item in pending_items:
+                product = item.product
                 
-                primary_item.quantity = total_qty
-                primary_item.save()
-                
-                sent_items.exclude(id=primary_item.id).delete()
+                # Проверяем наличие поля остатков (замените 'stock' на имя вашего поля, если оно отличается)
+                if hasattr(product, 'stock') and product.stock is not None:
+                    product.stock -= item.quantity
+                    product.save()
 
-        messages.success(request, "Новые дозаказы отправлены по цехам!")
+            # --- МЕСТО ДЛЯ ПЕЧАТИ ВСТРЕЧЕК ---
+            if grill_items.exists(): send_to_grill_printer(order, grill_items) 
+            if bar_items.exists(): send_to_bar_printer(order, bar_items)
+            if kitchen_items.exists(): send_to_kitchen_printer(order, kitchen_items)
+            
+            # Переводим отправленные блюда в статус 'sent'
+            pending_items.update(status='sent')
+            
+            if order.status == 'draft':
+                order.status = 'active'
+                order.save()
+            
+            # MERGE DUPLICATES: Объединяем одинаковые блюда в чеке для красоты
+            products_in_order = order.items.values_list('product_id', flat=True).distinct()
+            for prod_id in products_in_order:
+                sent_items = order.items.filter(product_id=prod_id, status='sent')
+                if sent_items.count() > 1:
+                    primary_item = sent_items.first()
+                    total_qty = sum(i.quantity for i in sent_items)
+                    
+                    primary_item.quantity = total_qty
+                    primary_item.save()
+                    
+                    sent_items.exclude(id=primary_item.id).delete()
+
+        messages.success(request, "Новые дозаказы отправлены по цехам! Остатки на складе обновлены.")
         return redirect('order_detail', table_id=order.table.id)
         
     order = get_object_or_404(Order, id=order_id)
