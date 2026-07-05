@@ -45,15 +45,24 @@ def waiter_dashboard(request):
 
 @login_required
 def print_prebill(request, order_id):
-    """Печатает предчек (текущее состояние заказа) без закрытия стола."""
+    """Печатает предчек без закрытия стола, если блюда были отправлены в работу."""
     if request.method == "POST":
-        order = get_object_or_404(Order, id=order_id, status='active')
+        order = get_object_or_404(Order, id=order_id, status__in=['draft', 'active'])
+        
+        # 🌟 БАРЬЕР БЕЗОПАСНОСТИ: Проверяем, есть ли хоть одно отправленное блюдо
+        # Если отправленных ('sent') позиций нет вообще, запрещаем печать
+        if not order.items.filter(status='sent').exists():
+            messages.error(
+                request, 
+                "Невозможно распечатать предчек! Сначала отправьте блюда на кухню/бар."
+            )
+            return redirect('order_detail', table_id=order.table.id)
         
         # Вызываем функцию печати из utils.py
-        # Передаем флаг is_final=False, чтобы на чеке было написано "ПРЕДЧЕК"
         send_to_bill_printer(order, is_final=False)
         
         messages.success(request, f"Предчек для стола №{order.table.number} отправлен на печать!")
+        
     return redirect('order_detail', table_id=order.table.id)
 
 

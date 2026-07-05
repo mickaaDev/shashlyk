@@ -10,7 +10,7 @@ class Category(models.Model):
     STATION_CHOICES = (
         ('bar', 'Бар'),
         ('kitchen', 'Кухня'),
-        ('grill', 'Гриль'),
+        ('grill', 'Мангал'),
     )
     
     # This allows unlimited menu sections (e.g., "Шашлыки", "Стейки", "Гарниры")
