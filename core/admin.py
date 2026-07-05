@@ -191,7 +191,7 @@ class ShiftAdmin(admin.ModelAdmin):
             </thead>
             <tbody>
                 <tr style="border-bottom: 1px solid var(--border-color, #eee);">
-                    <td style="padding: 10px;">🔥 {_('Мангал / Гриль')}</td>
+                    <td style="padding: 10px;">🔥 {_('Мангал ')}</td>
                     <td style="padding: 10px; text-align: right;">{report_data['grill']['revenue']:,} сом</td>
                     <td style="padding: 10px; text-align: right; color: #c0392b;">{report_data['grill']['cost']:,} сом</td>
                     <td style="padding: 10px; text-align: right; font-weight: bold; color: #27ae60;">{grill_margin:,} сом</td>

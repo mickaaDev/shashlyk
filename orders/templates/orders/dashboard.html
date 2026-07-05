@@ -65,7 +65,7 @@
 
         <!-- Сетка столов -->
         <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-6 g-3">
-            {% for table in tables %}
+            {% for table in tables|dictsort:"id" %}
                 <div class="col">
                     <a href="{% url 'order_detail' table.id %}" class="text-decoration-none">
                         <!-- Чистая проверка: если есть активный заказ — table-busy, если нет — table-free -->

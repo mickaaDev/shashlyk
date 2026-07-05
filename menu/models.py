@@ -35,7 +35,7 @@ class Category(models.Model):
 
 class Product(models.Model):
     DEPARTMENT_CHOICES = [
-        ('grill', '🔥 Мангал / Гриль'),
+        ('grill', '🔥 Мангал '),
         ('bar', '🍹 Бар / Напитки'),
         ('kitchen', '🍳 Горячий/Холодный цех'),
     ]
