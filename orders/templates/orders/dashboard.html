@@ -14,12 +14,34 @@
     /* CSS Grid: Ровно 4 столбца, центрированные в контейнере */
     .tables-flex-grid {
         display: grid;
-        grid-template-columns: repeat(4, 340px); /* Фиксируем ширину ячейки, чтобы было что центрировать */
+        grid-template-columns: repeat(4, 320px); /* Фиксируем ширину ячейки, чтобы было что центрировать */
         gap: 14px;         /* Пространство между столами */
         justify-content: center; /* Центрируем элементы внутри сетки */
         width: 100%;
     }
+    /* Target the 4th item to create a wide gap below the first row */
+.tables-flex-grid > a:nth-child(4) {
+    grid-column-end: span 1;
+    position: relative;
+    margin-bottom: 48px; /* Generous breathing room below the first row */
+}
 
+/* Bold, high-visibility dividing line */
+.tables-flex-grid > a:nth-child(4)::after {
+    content: "";
+    position: absolute;
+    bottom: -26px; /* Perfectly centered in the large gap */
+    right: 0;
+    
+    /* Width matching 4 tables (160px) + 3 gaps (16px) */
+    width: 1322px; 
+    
+    /* Strong visual presence */
+    height: 3px;               /* Solid 3px thickness */
+    background-color: #495057; /* Dark charcoal gray for strong contrast */
+    border-radius: 4px;        /* Smoothly rounded pill edges */
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); /* Micro shadow to lift it off the page */
+}
     /* Ультра-компактный блок стола */
     .table-mini-box {
         width: 100%;       
