@@ -3,7 +3,7 @@ from django.http import JsonResponse, HttpResponse, Http404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.utils import timezone
-from .models import Table, Order, OrderItem
+from .models import Table, Order, OrderItem, Waiter
 from menu.models import Category, Product
 from core.models import Shift
 from django.db.models import Prefetch  
@@ -27,11 +27,11 @@ def waiter_dashboard(request):
             try:
                 return redirect('shift_management')
             except NoReverseMatch:
-                # Жесткий запасной вариант, если имена маршрутов вообще не резолвятся
                 return redirect('/management/shift/')
                 
     tables = Table.objects.filter(is_active=True).order_by('number')
 
+    # 🌟 ИСПРАВЛЕНИЕ ТУТ: select_related('waiter') подтягивает данные из нашей новой легкой таблицы Waiter
     active_orders = Order.objects.filter(status='active').select_related('table', 'waiter')
     
     table_orders = {order.table_id: order for order in active_orders if order.table_id}
@@ -65,41 +65,43 @@ def print_prebill(request, order_id):
         
     return redirect('order_detail', table_id=order.table.id)
 
-
 @login_required
 def order_detail(request, table_id):
     table = get_object_or_404(Table, id=table_id)
     
-    # 1. Проверяем, есть ли уже у стола открытый заказ (активный или пока еще черновик)
+    # 1. Проверяем, есть ли уже у стола открытый заказ
     order = Order.objects.filter(
         table=table, 
         status__in=['draft', 'active']
     ).first()
     
-    # 2. Если заказа вообще нет (стол абсолютно чистый), создаем его как DRAFT
+    # 2. Если заказа вообще нет, создаем его как DRAFT
     if not order:
         order = Order.objects.create(
             table=table,
-            waiter=request.user,
-            status='draft'  # 🌟 ВАЖНО: создаем как черновик, чтобы зал оставался зеленым!
+            waiter=None,    # 🌟 ВАЖНО: Оставляем пустой ссылку на официанта, пока это черновик
+            status='draft'  
         )
     
     order_items = order.items.all()
     
-    # 🌟 ИСПРАВЛЕНИЕ ТУТ: Фильтруем категории и предварительно загружаем ТОЛЬКО активные продукты
-    # Замените 'product_set' на имя вашего Related Name в модели Category, если вы его переименовывали (например, 'products')
+    # 3. Достаем список всех работающих сегодня официантов для формы выбора
+    active_waiters = Waiter.objects.filter(is_active=True).order_by('name')
+    
+    # 4. Предварительно загружаем ТОЛЬКО активные продукты по категориям
     menu_categories = Category.objects.all().prefetch_related(
-    Prefetch(
-        'products', 
-        queryset=Product.objects.filter(is_active=True).order_by('name')
+        Prefetch(
+            'products', 
+            queryset=Product.objects.filter(is_active=True).order_by('name')
+        )
     )
-)
     
     return render(request, 'orders/order_detail.html', {
         'order': order,
         'table': table,
         'order_items': order_items,
         'menu_categories': menu_categories,
+        'waiters': active_waiters,  # 🌟 Передаем список официантов в шаблон
     })
 
 @login_required
@@ -185,13 +187,23 @@ def send_order_to_kitchen(request, order_id):
         bar_items = pending_items.filter(product__department='bar')
         kitchen_items = pending_items.filter(product__department='kitchen')
         
-        # Включаем атомарную транзакцию, чтобы списание и отправка происходили одновременно и без сбоев
+        # Включаем атомарную транзакцию
         with transaction.atomic():
-            # 🌟 КЛЮЧЕВОЙ БЛОК: Списание остатков со склада ДО смены статуса на 'sent'
+            # 🌟 КЛЮЧЕВОЙ БЛОК: Считываем выбранного официанта при первой отправке заказа
+            if order.status == 'draft':
+                waiter_id = request.POST.get('waiter_id')
+                if waiter_id:
+                    order.waiter_id = waiter_id
+                else:
+                    messages.error(request, "Пожалуйста, выберите официанта перед отправкой заказа!")
+                    return redirect('order_detail', table_id=order.table.id)
+                
+                order.status = 'active'
+                order.save()
+
+            # Списание остатков со склада ДО смены статуса на 'sent'
             for item in pending_items:
                 product = item.product
-                
-                # Проверяем наличие поля остатков (замените 'stock' на имя вашего поля, если оно отличается)
                 if hasattr(product, 'stock') and product.stock is not None:
                     product.stock -= item.quantity
                     product.save()
@@ -204,11 +216,7 @@ def send_order_to_kitchen(request, order_id):
             # Переводим отправленные блюда в статус 'sent'
             pending_items.update(status='sent')
             
-            if order.status == 'draft':
-                order.status = 'active'
-                order.save()
-            
-            # MERGE DUPLICATES: Объединяем одинаковые блюда в чеке для красоты
+            # MERGE DUPLICATES: Объединяем одинаковые блюда в чеке
             products_in_order = order.items.values_list('product_id', flat=True).distinct()
             for prod_id in products_in_order:
                 sent_items = order.items.filter(product_id=prod_id, status='sent')
@@ -249,26 +257,40 @@ def resend_item_to_kitchen(request, item_id):
 def close_order(request, order_id):
     """Closes out the order check, prints the final bill, and releases the table."""
     if request.method == "POST":
-        order = get_object_or_404(Order, id=order_id, status='active')
+        # 🌟 БЕЗОПАСНЫЙ ПОИСК: Ищем просто по ID без паники и 404 вылетов
+        order = Order.objects.filter(id=order_id).first()
         
-        # Защитный барьер: проверяем черновики
+        # Если такого ID вообще нет в базе данных
+        if not order:
+            print(f"⚠️ КРИТИЧЕСКАЯ ОШИБКА: Заказ с ID {order_id} не найден в базе!")
+            messages.error(request, f"Ошибка: Чек №{order_id} не найден в системе.")
+            return redirect('waiter_dashboard')
+            
+        # Если заказ нашли, но он уже закрыт/оплачен
+        if order.status == 'closed':
+            messages.warning(request, f"Чек №{order.id} уже был успешно закрыт ранее.")
+            return redirect('waiter_dashboard')
+
+        # Если в чеке только черновики и ничего не отправлено на кухню
+        if not order.items.filter(status='sent').exists():
+            messages.error(request, "Нельзя закрыть пустой счет! Сначала отправьте или удалите черновики.")
+            return redirect('order_detail', table_id=order.table.id if order.table else 1)
+            
+        # Защитный барьер: проверяем оставшиеся черновики
         if order.items.filter(status='pending').exists():
-            messages.error(request, "Нельзя закрыть счет! Сначала отправьте или удалите черновики.")
+            messages.error(request, "Нельзя закрыть счет! Сначала отправьте или удалите оставшиеся черновики.")
             return redirect('order_detail', table_id=order.table.id)
             
-        # 🌟 ПЕРЕХВАТЫВАЕМ ТИП ОПЛАТЫ ИЗ ФОРМЫ
+        # Перехватываем тип оплаты
         payment_method = request.POST.get('payment_method')
         if payment_method not in dict(Order.PAYMENT_METHODS):
             messages.error(request, "Пожалуйста, выберите корректный способ оплаты!")
             return redirect('order_detail', table_id=order.table.id)
             
-        # Сохраняем тип оплаты в базу данных
         order.payment_method = payment_method
         
-        # --- АВТОМАТИЧЕСКАЯ ПЕЧАТЬ ФИНАЛЬНОГО ЧЕКА НА БЭКЕНДЕ ---
+        # Автоматическая печать чека
         try:
-            # Передаем is_final=True — теперь функция внутри utils сама заглянет 
-            # в order.payment_method и красиво напечатает его в чеке
             send_to_bill_printer(order, is_final=True)
         except Exception as e:
             messages.warning(request, f"Заказ закрыт, но возникла ошибка печати: {e}")

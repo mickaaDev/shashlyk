@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
-from .models import Table, Order, OrderItem
+from .models import Table, Order, OrderItem, Waiter
 from django.utils.safestring import mark_safe
 from django.urls import reverse
 from django.db.models import Sum, F
@@ -13,6 +13,16 @@ class TableAdmin(admin.ModelAdmin):
     list_editable = ('is_available', 'is_active')
     search_fields = ('number',)
 
+
+@admin.register(Waiter)
+class WaiterAdmin(admin.ModelAdmin):
+    list_display = ('name', 'is_active')
+    list_filter = ('is_active',)
+    search_fields = ('name',)
+    
+    def __init__(self, model, admin_site):
+        super().__init__(model, admin_site)
+        self.model._meta.app_label = 'orders'
 
 class OrderItemInline(admin.TabularInline):
     model = OrderItem

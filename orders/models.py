@@ -19,7 +19,16 @@ class Table(models.Model):
         verbose_name = _('Стол')
         verbose_name_plural = _('Столы')
 
+class Waiter(models.Model):
+    name = models.CharField(max_length=50, unique=True, verbose_name=_("Имя официанта"))
+    is_active = models.BooleanField(default=True, verbose_name=_("Работает (Активен)"))
 
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = _('Официант')
+        verbose_name_plural = _('Официанты')
 
 class Order(models.Model):
     STATUS_CHOICES = (
@@ -41,7 +50,7 @@ class Order(models.Model):
     )
     
     table = models.ForeignKey(Table, on_delete=models.SET_NULL, null=True, blank=True, related_name='orders', verbose_name=_("Стол"))
-    waiter = models.ForeignKey(User, on_delete=models.PROTECT, verbose_name=_("Официант"))
+    waiter = models.ForeignKey(Waiter, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Официант")
     status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='active', verbose_name=_("Статус"))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Открыт в"))
     closed_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Закрыт в"))

@@ -13,7 +13,8 @@ def generate_ticket_text(order, items, department_name):
     lines.append("==================================")
     lines.append(f"Чек: #{order.id}")
     lines.append(f"Стол: №{order.table.number if order.table else 'Без стола'}")
-    lines.append(f"Официант: {order.waiter.username if order.waiter else 'Система'}")
+    # Change line 16 in /home/micka/Proejcts/shashlik/shashlyk/orders/utils.py to:
+    lines.append(f"Официант: {order.waiter.name if order.waiter else 'Система'}")
     lines.append(f"Время: {timezone.now().strftime('%H:%M:%S')}")
     lines.append("----------------------------------")
     
@@ -45,7 +46,7 @@ def generate_bill_text(order, is_final=False):
     # Основная информация о заказе
     lines.append(f"Заказ:    #{order.id}")
     lines.append(f"Стол:     №{order.table.number if order.table else 'Без стола'}")
-    lines.append(f"Официант: {order.waiter.username if order.waiter else 'Система'}")
+    lines.append(f"Официант: {order.waiter.name if order.waiter else 'Система'}")
     lines.append(f"Дата:     {timezone.now().strftime('%d.%m.%Y %H:%M')}")
     lines.append("----------------------------------")
     

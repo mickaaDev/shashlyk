@@ -4,7 +4,7 @@
 # Python cache files
 __pycache__/
 *.pyc
-
+*migrations
 # Virtual environment files
 venv/
 .env

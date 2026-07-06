@@ -2,138 +2,100 @@
 {% block content %}
 
 <style>
-    /* Общий фон зала в легком стиле */
+    /* Убираем все лишние отступы для чистого экрана */
     .hall-container {
         background-color: #f8f9fa;
-        /* 🌟 УДАЛИТЕ min-height и overflow-y: auto */
-        /* Позвольте странице растягиваться естественным образом */
-        padding-top: 20px;
-        padding-bottom: 40px; 
+        padding: 8px;
         font-family: system-ui, -apple-system, sans-serif;
-        
-        /* Гарантируем, что контейнер занимает всю доступную высоту, 
-           но не ограничиваем её жестко */
-        min-height: 100vh;
     }
 
-    /* Базовая карточка стола */
-    .card-table {
+    /* Флекс-контейнер: блоки плотно выстраиваются в ряд и переносятся только при нехватке места */
+    .tables-flex-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px; /* Минимальный зазор между столами */
+        justify-content: flex-start;
+    }
+
+    /* Ультра-компактный блок стола с фиксированной шириной */
+    .table-mini-box {
+        width: 130px;       /* Жестко зафиксированная минимальная ширина */
+        height: 80px;      /* Жестко зафиксированная компактная высота */
         border: 1px solid #dee2e6;
-        border-radius: 14px;
-        transition: all 0.2s ease-in-out;
-        min-height: 140px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02) !important;
+        border-radius: 6px;
+        transition: all 0.1s ease-in-out;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        padding: 4px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
     }
-    .card-table:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.06) !important;
+    .table-mini-box:hover {
+        transform: scale(1.03);
+        box-shadow: 0 3px 6px rgba(0, 0, 0, 0.06);
     }
 
-    /* Свободный стол (Мягкий пастельный зеленый) */
-    .table-free {
-        background-color: #ebf7ed !important;
-        border-color: #a3cfbb !important;
-    }
-    .table-free .table-number { color: #146c43; }
-    .table-free .table-status-text { color: #198754; }
-    .table-free .table-action { color: #198754; font-weight: bold; }
+    /* Цветовые схемы состояний */
+    .table-free { background-color: #ebf7ed !important; border-color: #a3cfbb !important; }
+    .table-free .num { color: #146c43; }
+    .table-free .status { color: #198754; }
 
-    /* Занятый стол / Обслуживание (Мягкий пастельный оранжевый/бежевый) */
-    .table-busy {
-        background-color: #fff3cd !important;
-        border-color: #ffe69c !important;
-    }
-    .table-busy .table-number { color: #664d03; }
-    .table-busy .table-status-text { color: #aa7c11; }
-    .table-busy .table-action { color: #b58100; font-weight: bold; }
+    .table-busy { background-color: #fff3cd !important; border-color: #ffe69c !important; }
+    .table-busy .num { color: #664d03; }
+    .table-busy .status { color: #aa7c11; }
+
+    .table-reserved { background-color: #f3f0ff !important; border-color: #dcd4ff !important; }
+    .table-reserved .num { color: #4c36b3; }
+    .table-reserved .status { color: #6b52ed; }
 </style>
 
 <div class="hall-container">
-    <div class="container-fluid px-4">
+    <div class="tables-flex-grid">
         
-        <!-- Верхняя инфо-панель -->
-        <div class="d-flex justify-content-between align-items-center mb-4 bg-white p-3 rounded-3 border border-light shadow-sm">
-            <div>
-                <h2 class="fw-bold text-dark m-0 fs-3">Интерактивный Зал</h2>
-            </div>
-            <div>
-                {% if active_shift %}
-                    <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 fw-bold fs-6 rounded-pill">
-                        🟢 Смена №{{ active_shift.id }} Открыта
-                    </span>
-                {% else %}
-                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fw-bold fs-6 rounded-pill">
-                        🔴 Смена Закрыта
-                    </span>
-                {% endif %}
-            </div>
-        </div>
+        {% for table in tables|dictsort:"id" %}
+            <a href="{% url 'order_detail' table.id %}" class="text-decoration-none">
+                <div class="table-mini-box 
+                    {% if table.current_active_order %}
+                        table-busy
+                    {% elif res %}
+                        table-reserved
+                    {% else %}
+                        table-free
+                    {% endif %}">
+                    
+                    <!-- Номер стола -->
+                    <div class="fw-bold num" style="font-size: 1.15rem; line-height: 1.1;">
+                        {{ table.number }}
+                    </div>
+                    
+                    <!-- Статус одной короткой строкой -->
+                    <div class="status fw-semibold text-truncate w-100" style="font-size: 0.6rem; margin-top: 2px; letter-spacing: -0.2px;">
+                        {% if table.current_active_order %}
+                            Занят
+                        {% elif res %}
+                            {{ res.reserved_for|date:"H:i" }}
+                        {% else %}
+                            Свободен
+                        {% endif %}
+                    </div>
 
-        <!-- Сетка столов -->
-        <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-6 g-3">
-            {% for table in tables|dictsort:"id" %}
-                <div class="col">
-                    <a href="{% url 'order_detail' table.id %}" class="text-decoration-none">
-                        <!-- Чистая проверка: если есть активный заказ — table-busy, если нет — table-free -->
-                        <div class="card card-table h-100 
-                            {% if table.current_active_order %}
-                                table-busy
-                            {% elif res %}
-                                table-reserved
-                            {% else %}
-                                table-free
-                            {% endif %}">
-                            
-                            <div class="card-body d-flex flex-column justify-content-between p-3">
-                                <div>
-                                    <div class="d-flex justify-content-between align-items-start">
-                                        <h3 class="fw-bold mb-0 table-number" style="font-size: 1.8rem;"> № {{ table.number }}</h3>
-                                    </div>
-                                    
-                                    <div class="small mt-1 table-status-text fw-medium">
-                                        {% if table.current_active_order %}
-                                            В работе
-                                        {% elif res %}
-                                            Бронь: {{ res.reserved_for|date:"H:C" }}
-                                        {% else %}
-                                            Свободен
-                                        {% endif %}
-                                    </div>
-
-                                    <!-- Дополнительный блок: Инфо о бронировании -->
-                                    {% if res %}
-                                        <div class="mt-2 p-1 rounded bg-white bg-opacity-75 border-start border-3 {% if table.current_active_order %}border-warning{% else %}border-primary{% endif %}" style="font-size: 0.75rem; color: #333;">
-                                            👤 <strong>{{ res.customer_name }}</strong><br>
-                                            ⏰ {{ res.reserved_for|date:"d.m в H:i" }}
-                                        </div>
-                                    {% endif %}
-                                </div>
-                                
-                                <div class="mt-3 pt-2 border-top border-light-subtle d-flex justify-content-between align-items-center">
-                                    <span class="small text-muted" style="font-size: 0.75rem;">Статус:</span>
-                                    <span class="table-action small text-uppercase tracking-wider" style="font-size: 0.75rem;">
-                                        {% if table.current_active_order %}
-                                            Стол Открыт
-                                        {% elif res %}
-                                            Резерв
-                                        {% else %}
-                                            Свободный
-                                        {% endif %}
-                                    </span>
-                                </div>
-                                
-                            </div>
+                    <!-- Если есть бронь, выводим микро-имя гостя -->
+                    {% if res %}
+                        <div class="text-dark text-truncate w-100" style="font-size: 0.55rem; line-height: 1; margin-top: 1px; opacity: 0.8;">
+                            👤 {{ res.customer_name }}
                         </div>
-                    </a>
+                    {% endif %}
+                    
                 </div>
-            {% empty %}
-                <div class="col-12 text-center py-5 bg-white rounded-3 border">
-                    <span class="fs-1">🗺️</span>
-                    <p class="text-muted mt-2 mb-0">Столы не найдены. Создайте конфигурацию столов в панели администратора Django.</p>
-                </div>
-            {% endfor %}
-        </div>
-
+            </a>
+        {% empty %}
+            <div class="w-100 text-center py-4 bg-white rounded border">
+                <p class="text-muted small mb-0">Столы отсутствуют.</p>
+            </div>
+        {% endfor %}
+        
     </div>
 </div>
 

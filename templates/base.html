@@ -32,7 +32,7 @@
         }
         
         .navbar-brand {
-            font-size: 1.25rem;
+            font-size: 1.15rem;
             letter-spacing: 0.5px;
         }
 
@@ -43,7 +43,7 @@
             position: relative;
         }
         .text-logo-accent {
-            color: #1c200f !important; /* Теплый, сочный янтарно-оранжевый цвет */
+            color: #1c200f !important; 
         }
         /* Кастомизация всплывающих уведомлений Django */
         .alert-custom {
@@ -69,7 +69,7 @@
 <body>
 
     <!-- Навигационная панель -->
-    <nav class="navbar navbar-expand navbar-light py-2">
+    <nav class="navbar navbar-expand navbar-light py-1">
         <div class="container-fluid px-3">
             <a class="navbar-brand fw-bold text-logo-accent d-flex align-items-center" href="{% url 'waiter_dashboard' %}">
                 <span class="me-2">🎱</span> SHASHLYK POS
@@ -77,25 +77,20 @@
             
             <div class="ms-auto">
                 {% if user.is_authenticated %}
-                    <div class="d-flex align-items-center gap-3">
-                        <!-- Имя текущего официанта -->
-                        <span class="navbar-text text-secondary small">
-                            Пользователь: <strong class="text-dark fw-semibold">{{ user.username }}</strong>
+                    <div class="d-flex align-items-center gap-2">
+                        <!-- Компактное имя пользователя -->
+                        <span class="badge bg-light text-dark border fw-semibold px-2 py-1" style="font-size: 0.8rem;">
+                            👤 {{ user.name }}
                         </span>
                         
                         <!-- Безопасная кнопка выхода (POST-запрос) -->
                         <form action="{% url 'logout' %}" method="post" class="m-0 p-0">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-sm btn-outline-danger py-1 px-2 rounded-2 fw-medium" style="font-size: 0.8rem;">
+                            <button type="submit" class="btn btn-sm btn-outline-danger py-1 px-2 rounded-2 fw-medium" style="font-size: 0.75rem;">
                                 Выйти
                             </button>
                         </form>
                     </div>
-                {% else %}
-                    <!-- Состояние, когда пользователь не авторизован -->
-                    <span class="navbar-text text-muted small fw-medium">
-                        Требуется авторизация
-                    </span>
                 {% endif %}
             </div>
         </div>
@@ -112,7 +107,7 @@
             {% endfor %}
         {% endif %}
 
-        <!-- Сюда подставляются дочерние шаблоны -->
+        <!-- Сюда подставляются дочерние шаблоны (сетка столов займет все место) -->
         {% block content %}
         {% endblock %}
     </div>

@@ -145,8 +145,25 @@
         <div class="col-md-6 poster-menu-center p-3 h-100">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4 class="fw-bold m-0 text-dark">Стол {{ table.number }} <span class="text-muted fs-6">| Нажатие добавляет в чек</span></h4>
-                <div class="text-end text-muted small">
-                    Официант: <strong class="text-dark">{{ order.waiter.username }}</strong>
+                
+                <div class="text-end">
+                    {% if order.status == 'draft' %}
+                        <!-- Clean dropdown assignment right inside the top context header -->
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="text-muted small text-nowrap">Кто обслуживает?</span>
+                            <!-- Attached directly to our submission pipeline by mirroring data via javascript -->
+                            <select id="header-waiter-select" class="form-select form-select-sm fw-semibold border-secondary" style="max-width: 180px;" onchange="syncWaiterToForm(this.value)">
+                                <option value="" disabled selected>-- Выберите --</option>
+                                {% for waiter in waiters %}
+                                    <option value="{{ waiter.id }}">👤 {{ waiter.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    {% else %}
+                        <div class="text-muted small">
+                            Официант: <strong class="text-dark">{{ order.waiter.name }}</strong>
+                        </div>
+                    {% endif %}
                 </div>
             </div>
 
@@ -226,15 +243,14 @@
 
         <!-- ================= 3. ПРАВАЯ КОЛОНКА: Текущий Чек Стола ================= -->
         <div class="col-md-4 poster-cart-right">
-            <!-- ЗОНА ОБНОВЛЕНИЯ ЧЕКА (Теперь AJAX перезаписывает этот внутренний контейнер, не ломая внешнюю структуру) -->
             <div id="receipt-container" class="d-flex flex-column h-100 w-100">
-                <!-- Шапка Счета (Фиксированная) -->
+                <!-- Шапка Счета -->
                 <div class="cart-header p-3 bg-light d-flex justify-content-between align-items-center border-bottom">
                     <span class="fs-5 fw-bold text-dark">Заказ №{{ order.id }}</span>
                     <span class="badge bg-warning text-dark px-3 py-2 fw-bold">ОТКРЫТ</span>
                 </div>
 
-                <!-- Тело Счета (Динамический список со скроллом) -->
+                <!-- Тело Счета -->
                 <div class="cart-items-wrapper p-3">
                     {% for item in order_items|dictsort:"status" %}
                         <div class="cart-item-row d-flex justify-content-between align-items-center">
@@ -252,16 +268,13 @@
                                 </div>
                             </div>
 
-                            <!-- Модификаторы количества -->
                             <div class="d-flex align-items-center me-3">
                                 {% if item.status == 'pending' %}
                                     <form action="{% url 'decrease_item' item.id %}" method="POST" class="m-0">
                                         {% csrf_token %}
                                         <button type="submit" class="btn qty-btn">-</button>
                                     </form>
-                                    
                                     <span class="mx-2 fw-bold text-dark" style="min-width: 20px; text-align: center;">{{ item.quantity }}</span>
-                                    
                                     <form action="{% url 'increase_item' item.id %}" method="POST" class="m-0">
                                         {% csrf_token %}
                                         <button type="submit" class="btn qty-btn">+</button>
@@ -271,7 +284,6 @@
                                 {% endif %}
                             </div>
 
-                            <!-- Цены и повторные встречки -->
                             <div class="text-end" style="min-width: 90px;">
                                 {% if item.status == 'pending' %}
                                     <span class="fw-bold text-dark">{{ item.get_total_price }} с.</span>
@@ -293,26 +305,29 @@
                     {% endfor %}
                 </div>
 
-                <!-- Подвал Счета (Фиксированная нижняя панель итогов) -->
+                <!-- Подвал Счета (Кнопки возвращены к красивому исходному виду) -->
                 <div class="cart-footer p-3 bg-light border-top shadow-sm">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <span class="fs-5 fw-bold text-secondary">Итого к оплате:</span>
                         <span class="fs-3 fw-bold text-dark">{{ order.total_amount }} сом</span>
                     </div>
                     
-                    <!-- Верхний ряд: Кухня и Предчек -->
                     <div class="row g-2 mb-2">
                         <!-- Кухня -->
                         <div class="col-6">
-                            <form action="{% url 'send_order_to_kitchen' order.id %}" method="POST" class="m-0">
+                            <form id="kitchen-submit-form" action="{% url 'send_order_to_kitchen' order.id %}" method="POST" class="m-0">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-outline-secondary btn-md w-100 py-2 fw-bold text-uppercase" style="font-size: 0.85rem; border-width: 2px;">
-                                    🍳 В Печать
+                                {% if order.status == 'draft' %}
+                                    <!-- Hidden target input that javascript updates synchronously -->
+                                    <input type="hidden" name="waiter_id" id="hidden-waiter-id" value="">
+                                {% endif %}
+                                <button type="submit" class="btn btn-success btn-md w-100 py-2 fw-bold text-uppercase" style="font-size: 0.85rem;">
+                                    🔥 На Кухню
                                 </button>
                             </form>
                         </div>
                         
-                        <!-- БЭКЕНД Предчек -->
+                        <!-- Предчек -->
                         <div class="col-6">
                             <form action="{% url 'print_prebill' order.id %}" method="POST" class="m-0">
                                 {% csrf_token %}
@@ -323,72 +338,107 @@
                         </div>
                     </div>
 
-                    <!-- Нижний ряд: Расчет -->
+                    <!-- Расчет -->
                     <div class="row g-2 mt-1">
                         <div class="col-12">
-                            <button type="button" 
-                                    class="btn btn-success btn-lg w-100 py-3 fw-bold text-uppercase text-white shadow-sm" 
-                                    style="font-size: 1rem;" 
-                                    data-bs-toggle="modal" 
-                                    data-bs-target="#paymentModal">
+                            <button type="button" class="btn btn-success btn-lg w-100 py-3 fw-bold text-uppercase text-white shadow-sm" style="font-size: 1rem;" data-bs-toggle="modal" data-bs-target="#paymentModal">
                                 💰 Закрыть и Рассчитать
                             </button>
                         </div>
                     </div>
                 </div>
-            </div> <!-- Конец #receipt-container -->
+            </div> 
         </div>
 
     </div>
 </div>
 
-<!-- Модальное окно оплаты вынесено из receipt-container наружу, чтобы его инициализация в Bootstrap не ломалась при AJAX-обновлении чека -->
+<!-- Модальное окно оплаты -->
 <div class="modal fade" id="paymentModal" tabindex="-1" aria-labelledby="paymentModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <div class="modal-header bg-success text-white">
-                <h5 class="modal-title fw-bold" id="paymentModalLabel">💵 Выберите способ оплаты</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form action="{% url 'close_order' order.id %}" method="POST" class="m-0">
-                {% csrf_token %}
-                <div class="modal-body p-4">
-                    <p class="text-muted mb-3 text-center">Выберите, как гость планирует оплатить счет:</p>
-                    <div class="d-flex flex-column gap-3">
-                        <input type="radio" class="btn-check" name="payment_method" id="pay-cash" value="cash" checked>
-                        <label class="btn btn-outline-secondary btn-lg py-3 text-start fs-5 fw-semibold d-flex justify-content-between align-items-center" for="pay-cash">
-                            <span>💵 Наличные</span>
-                            <span class="badge bg-light text-dark border">сом</span>
-                        </label>
-
-                        <input type="radio" class="btn-check" name="payment_method" id="pay-card" value="card">
-                        <label class="btn btn-outline-secondary btn-lg py-3 text-start fs-5 fw-semibold d-flex justify-content-between align-items-center" for="pay-card">
-                            <span>💳 Банковская карта</span>
-                            <span class="text-muted" style="font-size: 0.8rem;">POS-терминал</span>
-                        </label>
-
-                        <input type="radio" class="btn-check" name="payment_method" id="pay-qr" value="qr">
-                        <label class="btn btn-outline-secondary btn-lg py-3 text-start fs-5 fw-semibold d-flex justify-content-between align-items-center" for="pay-qr">
-                            <span>📱 QR-платеж</span>
-                            <span class="text-success" style="font-size: 0.8rem;">M-Bank / Элкарт</span>
-                        </label>
-                    </div>
-                    <div class="mt-4 p-3 bg-light rounded text-center">
-                        <span class="text-secondary d-block uppercase fw-bold" style="font-size: 0.8rem; letter-spacing: 1px;">Итого к оплате</span>
-                        <span class="fs-3 fw-bold text-dark" id="modal-total-amount">{{ order.total_amount|floatformat:"0" }} сом</span>
-                    </div>
+            {% if order %}
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title fw-bold" id="paymentModalLabel">💵 Выберите способ оплаты</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-footer bg-light border-0 d-flex gap-2">
-                    <button type="button" class="btn btn-secondary flex-grow-1 py-2 fw-semibold" data-bs-dismiss="modal">Отмена</button>
-                    <button type="submit" class="btn btn-success flex-grow-1 py-2 fw-bold text-uppercase">Подтвердить расчет</button>
+                <form action="{% url 'close_order' order.id %}" method="POST" class="m-0">
+                    {% csrf_token %}
+                    <div class="modal-body p-4">
+                        <p class="text-muted mb-3 text-center">Выберите, как гость планирует оплатить счет:</p>
+                        <div class="d-flex flex-column gap-3">
+                            <input type="radio" class="btn-check" name="payment_method" id="pay-cash" value="cash" checked>
+                            <label class="btn btn-outline-secondary btn-lg py-3 text-start fs-5 fw-semibold d-flex justify-content-between align-items-center" for="pay-cash">
+                                <span>💵 Наличные</span>
+                                <span class="badge bg-light text-dark border">сом</span>
+                            </label>
+
+                            <input type="radio" class="btn-check" name="payment_method" id="pay-card" value="card">
+                            <label class="btn btn-outline-secondary btn-lg py-3 text-start fs-5 fw-semibold d-flex justify-content-between align-items-center" for="pay-card">
+                                <span>💳 Банковская карта</span>
+                                <span class="text-muted" style="font-size: 0.8rem;">POS-терминал</span>
+                            </label>
+
+                            <input type="radio" class="btn-check" name="payment_method" id="pay-qr" value="qr">
+                            <label class="btn btn-outline-secondary btn-lg py-3 text-start fs-5 fw-semibold d-flex justify-content-between align-items-center" for="pay-qr">
+                                <span>📱 QR-платеж</span>
+                                <span class="text-success" style="font-size: 0.8rem;">M-Bank / Элкарт</span>
+                            </label>
+                        </div>
+                        <div class="mt-4 p-3 bg-light rounded text-center">
+                            <span class="text-secondary d-block uppercase fw-bold" style="font-size: 0.8rem; letter-spacing: 1px;">Итого к оплате</span>
+                            <span class="fs-3 fw-bold text-dark" id="modal-total-amount">{{ order.total_amount|floatformat:"0" }} сом</span>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light border-0 d-flex gap-2">
+                        <button type="button" class="btn btn-secondary flex-grow-1 py-2 fw-semibold" data-bs-dismiss="modal">Отмена</button>
+                        <button type="submit" class="btn btn-success flex-grow-1 py-2 fw-bold text-uppercase">Подтвердить расчет</button>
+                    </div>
+                </form>
+            {% else %}
+                <div class="modal-header bg-secondary text-white">
+                    <h5 class="modal-title fw-bold" id="paymentModalLabel">🔒 Расчет невозможен</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-            </form>
+                <div class="modal-body p-4 text-center">
+                    <div class="fs-1 mb-2">🍽️</div>
+                    <h5 class="fw-bold text-dark">Стол еще пуст</h5>
+                    <p class="text-muted small m-0">Нельзя закрыть счет, в котором нет сохраненных позиций.</p>
+                </div>
+                <div class="modal-footer bg-light border-0">
+                    <button type="button" class="btn btn-secondary w-100 py-2 fw-semibold" data-bs-dismiss="modal">Понятно</button>
+                </div>
+            {% endif %}
         </div>
     </div>
 </div>
 
 <script>
-    // ================= 1. ЛОГИКА ПЕРЕКЛЮЧЕНИЯ СТАНЦИЙ =================
+    // ================= СИНХРОНИЗАЦИЯ СЕЛЕКТА ОФИЦИАНТА =================
+    function syncWaiterToForm(val) {
+        const targetInput = document.getElementById('hidden-waiter-id');
+        if (targetInput) {
+            targetInput.value = val;
+        }
+    }
+
+    // Проверка выбора перед отправкой формы на кухню
+    document.addEventListener("DOMContentLoaded", function() {
+        const kitchenForm = document.getElementById('kitchen-submit-form');
+        if (kitchenForm) {
+            kitchenForm.addEventListener('submit', function(e) {
+                const hiddenInput = document.getElementById('hidden-waiter-id');
+                // Если элемент существует (черновик), проверяем заполненность
+                if (hiddenInput && !hiddenInput.value) {
+                    e.preventDefault();
+                    alert("Пожалуйста, выберите официанта в верхней части экрана перед отправкой на кухню!");
+                    document.getElementById('header-waiter-select').focus();
+                }
+            });
+        }
+    });
+
+    // ================= ЛОГИКА ПЕРЕКЛЮЧЕНИЯ СТАНЦИЙ =================
     function switchStation(stationName) {
         document.querySelectorAll('.station-panel').forEach(panel => {
             panel.style.display = 'none';
@@ -429,20 +479,17 @@
         if(id === 'btn-bar') btn.style.color = '#1c200f';
     }
 
-    // ================= 2. ЛОГИКА АСИНХРОННОГО ДОБАВЛЕНИЯ БЛЮД =================
+    // ================= ЛОГИКА АСИНХРОННОГО ДОБАВЛЕНИЯ БЛЮД =================
     document.addEventListener("DOMContentLoaded", function() {
-        // Инициализация первой вкладки
         switchStation('kitchen');
 
         const csrfToken = document.getElementById('global-csrf').value;
         const menuArea = document.querySelector('.menu-display-area');
 
         if (menuArea) {
-            // Слушаем клики на всей области меню (делегирование событий)
             menuArea.addEventListener('click', function(event) {
-                // Ищем, был ли клик совершен по кнопке добавления или внутри неё
                 const button = event.target.closest('.add-to-order-btn');
-                if (!button) return; // Если кликнули мимо кнопки, ничего не делаем
+                if (!button) return;
 
                 event.preventDefault();
                 const url = button.getAttribute('data-url');
@@ -457,7 +504,6 @@
                 })
                 .then(response => {
                     if (response.ok) {
-                        // Запрашиваем свежую страницу для вытягивания обновленного чека
                         return fetch(window.location.href);
                     }
                     throw new Error('Сервер вернул ошибку: ' + response.status);
@@ -474,7 +520,6 @@
                         currentReceipt.innerHTML = newReceipt.innerHTML;
                     }
 
-                    // Синхронизируем сумму в модальном окне оплаты
                     const newTotal = doc.getElementById('modal-total-amount');
                     const currentTotal = document.getElementById('modal-total-amount');
                     if(newTotal && currentTotal) {
